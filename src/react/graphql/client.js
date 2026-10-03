@@ -4,8 +4,9 @@
  */
 import { useAuthStore } from '../store/useAuthStore';
 
-const GRAPHQL_ENDPOINT = "http://localhost:8000/graphql";
-const TOKEN_ENDPOINT = "http://localhost:8000/token";
+const API_BASE = import.meta.env.PUBLIC_API_URL || "http://localhost:8000";
+const GRAPHQL_ENDPOINT = `${API_BASE}/graphql`;
+const TOKEN_ENDPOINT = `${API_BASE}/token`;
 
 export async function fetchGraphQL(query, variables = {}) {
   try {
