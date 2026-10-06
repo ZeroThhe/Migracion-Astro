@@ -36,7 +36,6 @@ export default function CheckoutView() {
 
       const variables = {
         datos: {
-          usuarioId: 1, // Usuario Fátima Martín del Campo
           direccionEnvio,
           metodoPago,
           detalles,
