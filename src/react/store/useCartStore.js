@@ -1,10 +1,11 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 /**
  * Tienda Zustand Global para la Gestión del Carrito (Tema 11)
  * Evita el Prop Drilling (Tema 6) permitiendo a cualquier componente acceder al estado del carrito.
  */
-export const useCartStore = create((set, get) => ({
+export const useCartStore = create(persist((set, get) => ({
   cartItems: [],
 
   // Agregar un producto al carrito
@@ -12,8 +13,9 @@ export const useCartStore = create((set, get) => ({
     set((state) => {
       const existingIndex = state.cartItems.findIndex((item) => item.producto.id === producto.id);
       if (existingIndex >= 0) {
-        const updated = [...state.cartItems];
-        updated[existingIndex].cantidad += cantidad;
+        const updated = state.cartItems.map((item, i) =>
+          i === existingIndex ? { ...item, cantidad: item.cantidad + cantidad } : item
+        );
         return { cartItems: updated };
       } else {
         return { cartItems: [...state.cartItems, { producto, cantidad }] };
@@ -53,4 +55,4 @@ export const useCartStore = create((set, get) => ({
   getTotalPrice: () => {
     return get().cartItems.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0);
   },
-}));
+}), { name: 'facc-cart' })); // persist: guarda el carrito en localStorage (sobrevive al ir y volver de Mercado Pago)

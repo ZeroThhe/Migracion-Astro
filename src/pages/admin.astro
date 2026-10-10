@@ -1,0 +1,9 @@
+---
+import Layout from '../layouts/Layout.astro';
+import AdminDashboard from '../react/views/AdminDashboard.jsx';
+---
+
+<Layout title="Admin Dashboard - FACC Music">
+  <!-- client:only: el panel depende de la sesión guardada en el navegador (localStorage) -->
+  <AdminDashboard client:only="react" />
+</Layout>

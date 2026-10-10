@@ -10,7 +10,8 @@ import ProductDetailView from './views/ProductDetailView';
 import CartView from './views/CartView';
 import CheckoutView from './views/CheckoutView';
 import OrderSuccessView from './views/OrderSuccessView';
-import { fetchGraphQL, QUERIES } from './graphql/client';
+import { fetchGraphQL, QUERIES, MUTATIONS } from './graphql/client';
+import { useCartStore } from './store/useCartStore';
 import { useFlowStore, VIEWS } from './store/useFlowStore';
 import AuthView from './views/AuthView';
 import { useAuthStore } from './store/useAuthStore';
@@ -20,7 +21,9 @@ import { useAuthStore } from './store/useAuthStore';
  * Aplica los 15 temas de React de la guía Vite (Hooks, useTransition, Fetching, Zustand, Portales, etc.)
  */
 export default function App() {
-  const { currentView, selectedCategory, elegirCategoria } = useFlowStore();
+  const { currentView, selectedCategory, elegirCategoria, pedidoCreado } = useFlowStore();
+  const clearCart = useCartStore((s) => s.clearCart);
+  const [avisoPago, setAvisoPago] = useState(null);
 
   // Estados Locales (Tema 2: Hooks)
   const [categorias, setCategorias] = useState([]);
@@ -42,6 +45,34 @@ export default function App() {
       .then((d) => { if (!d.me) logout(); })
       .catch(() => {}); // si el servidor está caído, no cerramos la sesión local
   }, [token, logout]);
+
+  // Regreso desde Mercado Pago: MP agrega ?payment_id=...&status=...&external_reference=<pedidoId>
+  // a la URL. NO confiamos en esos datos: el backend consulta el pago real a Mercado Pago.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pedidoId = params.get('external_reference');
+    if (!pedidoId) return;
+
+    const paymentId = params.get('payment_id') || params.get('collection_id');
+    const status = params.get('status') || params.get('collection_status');
+    window.history.replaceState({}, '', window.location.pathname); // limpia la URL
+
+    if (status !== 'approved' || !paymentId || paymentId === 'null') {
+      setAvisoPago(
+        status === 'pending' || status === 'in_process'
+          ? `Tu pago del pedido #${pedidoId} quedó pendiente en Mercado Pago (ej. OXXO). Se marcará cuando se acredite.`
+          : `El pago del pedido #${pedidoId} no se completó. Tu carrito sigue guardado: puedes intentarlo de nuevo.`
+      );
+      return;
+    }
+
+    fetchGraphQL(MUTATIONS.CONFIRMAR_PAGO_MERCADO_PAGO, { pedidoId: parseInt(pedidoId), paymentId })
+      .then((d) => {
+        clearCart();
+        pedidoCreado(d.confirmarPagoMercadoPago);
+      })
+      .catch((err) => setAvisoPago(err.message));
+  }, [clearCart, pedidoCreado]);
 
   // Cargar Categorías desde GraphQL (Tema 7: Fetching)
   const cargarCategorias = useCallback(async () => {
@@ -159,6 +190,12 @@ export default function App() {
 
           {/* ÁREA PRINCIPAL (VISTA DINÁMICA DE LA MÁQUINA DE ESTADOS) */}
           <main className="flex-1 w-full min-w-0">
+            {avisoPago && (
+              <div className="mb-6 rounded-2xl bg-rose-500/10 border border-rose-500/30 p-4 text-xs text-rose-200 flex justify-between gap-4">
+                <span>{avisoPago}</span>
+                <button onClick={() => setAvisoPago(null)} className="font-bold hover:text-white">✕</button>
+              </div>
+            )}
             {renderView()}
           </main>
         </div>

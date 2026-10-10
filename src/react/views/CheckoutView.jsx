@@ -3,17 +3,20 @@ import { ArrowLeft, CreditCard, Truck, CheckCircle2, Lock } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { useFlowStore } from '../store/useFlowStore';
 import { fetchGraphQL, MUTATIONS } from '../graphql/client';
+import PaymentMethods from '../components/PaymentMethods';
 
 /**
- * CheckoutView — Formulario de Finalización de Compra (Sección 7.2)
- * Envía la mutation GraphQL `registrarPedido` con los renglones del carrito.
+ * CheckoutView — Finalización de Compra (Sección 7.2)
+ * Paso 1: dirección + método → `registrarPedido` crea el pedido PENDIENTE.
+ * Paso 2: se paga con PayPal o Mercado Pago (PaymentMethods).
  */
 export default function CheckoutView() {
   const { cartItems, getTotalPrice, clearCart } = useCartStore();
   const { volver, pedidoCreado } = useFlowStore();
 
   const [direccionEnvio, setDireccionEnvio] = useState("Av. Las Palmas #450, Col. Centro, Guadalajara, JAL");
-  const [metodoPago, setMetodoPago] = useState("Tarjeta de Crédito");
+  const [metodoPago, setMetodoPago] = useState("PayPal");
+  const [pedido, setPedido] = useState(null); // pedido PENDIENTE ya creado en el backend
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -28,34 +31,28 @@ export default function CheckoutView() {
 
     try {
       // Formatear renglones para la Mutation PedidoInput
+      // Solo producto y cantidad: el precio y el usuario los pone el servidor
       const detalles = cartItems.map((item) => ({
         productoId: item.producto.id,
         cantidad: item.cantidad,
-        precioUnitario: item.producto.precio,
       }));
 
-      const variables = {
-        datos: {
-          direccionEnvio,
-          metodoPago,
-          detalles,
-        },
-      };
-
-      // Ejecutar Mutation GraphQL en el servidor
-      const data = await fetchGraphQL(MUTATIONS.REGISTRAR_PEDIDO, variables);
-
-      if (data && data.registrarPedido) {
-        const orden = data.registrarPedido;
-        clearCart();
-        pedidoCreado(orden); // Transición de estado a Pedido Creado
-      }
+      const data = await fetchGraphQL(MUTATIONS.REGISTRAR_PEDIDO, {
+        datos: { direccionEnvio, metodoPago, detalles },
+      });
+      setPedido(data.registrarPedido); // queda PENDIENTE hasta pagar
     } catch (err) {
       console.error("Error al registrar pedido:", err);
       setError(err.message || "Ocurrió un error al procesar el pedido en el servidor GraphQL.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Pago confirmado por el backend → vaciar carrito y mostrar recibo
+  const handlePagado = (orden) => {
+    clearCart();
+    pedidoCreado(orden);
   };
 
   return (
@@ -77,6 +74,9 @@ export default function CheckoutView() {
               <span>Datos de Envío & Pago</span>
             </h2>
 
+            {pedido ? (
+              <PaymentMethods pedido={pedido} onPagado={handlePagado} />
+            ) : (
             <form onSubmit={handleConfirmarPedido} className="space-y-4">
               <div>
                 <label className="text-xs font-bold text-amber-200 block mb-1.5">
@@ -96,15 +96,26 @@ export default function CheckoutView() {
                 <label className="text-xs font-bold text-amber-200 block mb-1.5">
                   Método de Pago
                 </label>
-                <select
-                  value={metodoPago}
-                  onChange={(e) => setMetodoPago(e.target.value)}
-                  className="w-full rounded-full glass-input px-4 py-2 text-xs"
-                >
-                  <option value="Tarjeta de Crédito" className="bg-[#180D09] text-white">Tarjeta de Crédito / Débito</option>
-                  <option value="PayPal" className="bg-[#180D09] text-white">PayPal / Transferencia</option>
-                  <option value="Pago contra Entrega" className="bg-[#180D09] text-white">Pago contra Entrega</option>
-                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { valor: 'PayPal', nota: 'Cuenta PayPal o tarjeta' },
+                    { valor: 'Mercado Pago', nota: 'Tarjeta, OXXO o saldo MP' },
+                  ].map((m) => (
+                    <button
+                      type="button"
+                      key={m.valor}
+                      onClick={() => setMetodoPago(m.valor)}
+                      className={`rounded-2xl p-3 text-left border transition-colors ${
+                        metodoPago === m.valor
+                          ? 'border-pink-400 bg-pink-500/15'
+                          : 'border-amber-500/20 hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="block text-sm font-bold text-amber-100">{m.valor}</span>
+                      <span className="block text-[10px] text-amber-200/60">{m.nota}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {error && (
@@ -115,19 +126,20 @@ export default function CheckoutView() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || cartItems.length === 0}
                 className="w-full glass-btn-pink rounded-full py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 mt-6"
               >
                 {loading ? (
-                  <span>Registrando Pedido en Backend...</span>
+                  <span>Creando pedido...</span>
                 ) : (
                   <>
                     <Lock className="h-4 w-4" />
-                    <span>Confirmar y Pagar (${totalPrice.toFixed(2)} MXN)</span>
+                    <span>Continuar al pago (${totalPrice.toFixed(2)} MXN)</span>
                   </>
                 )}
               </button>
             </form>
+            )}
           </div>
         </div>
 

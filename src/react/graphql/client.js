@@ -125,6 +125,21 @@ export const QUERIES = {
       }
     }
   `,
+
+  CONFIG_PAGOS: `
+    query { configPagos { paypalClientId moneda } }
+  `,
+
+  // Admin: el backend regresa TODOS los pedidos si el token es de un ADMIN
+  HISTORIAL_PEDIDOS: `
+    query {
+      historialPedidos {
+        id fecha total status metodoPago referenciaPago direccionEnvio
+        usuario { nombre email }
+        detalles { cantidad precioUnitario producto { nombre } }
+      }
+    }
+  `,
 };
 
 // Mutations Predefinidas
@@ -140,6 +155,50 @@ export const MUTATIONS = {
         metodoPago
       }
     }
+  `,
+
+  // ---- Pagos ----
+  CREAR_ORDEN_PAYPAL: `
+    mutation ($pedidoId: Int!) { crearOrdenPaypal(pedidoId: $pedidoId) }
+  `,
+  CAPTURAR_PAGO_PAYPAL: `
+    mutation ($pedidoId: Int!, $orderId: String!) {
+      capturarPagoPaypal(pedidoId: $pedidoId, orderId: $orderId) {
+        id fecha total status direccionEnvio metodoPago referenciaPago
+      }
+    }
+  `,
+  CREAR_PAGO_MERCADO_PAGO: `
+    mutation ($pedidoId: Int!) { crearPagoMercadoPago(pedidoId: $pedidoId) }
+  `,
+  CONFIRMAR_PAGO_MERCADO_PAGO: `
+    mutation ($pedidoId: Int!, $paymentId: String!) {
+      confirmarPagoMercadoPago(pedidoId: $pedidoId, paymentId: $paymentId) {
+        id fecha total status direccionEnvio metodoPago referenciaPago
+      }
+    }
+  `,
+
+  VERIFICAR_PAGO_MERCADO_PAGO: `
+    mutation ($pedidoId: Int!) {
+      verificarPagoMercadoPago(pedidoId: $pedidoId) {
+        id fecha total status direccionEnvio metodoPago referenciaPago
+      }
+    }
+  `,
+
+  // ---- Admin ----
+  REGISTRAR_PRODUCTO: `
+    mutation ($input: ProductoInput!) { registrarProducto(input: $input) { id } }
+  `,
+  ACTUALIZAR_PRODUCTO: `
+    mutation ($id: Int!, $input: ProductoInput!) { actualizarProducto(id: $id, input: $input) { id } }
+  `,
+  ELIMINAR_PRODUCTO: `
+    mutation ($id: Int!) { eliminarProducto(id: $id) }
+  `,
+  CAMBIAR_STATUS_PEDIDO: `
+    mutation ($id: Int!, $status: String!) { cambiarStatusPedido(id: $id, status: $status) { id status } }
   `,
 
   REGISTRO: `

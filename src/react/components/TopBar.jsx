@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Disc, Search, Home, LogIn, LogOut, User } from 'lucide-react';
+import { ShoppingBag, Disc, Search, Home, LogIn, LogOut, User, LayoutDashboard } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { useFlowStore } from '../store/useFlowStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -66,6 +66,17 @@ export default function TopBar({ searchQuery, onSearchChange }) {
             <Home className="h-3.5 w-3.5" />
             <span>Inicio</span>
           </button>
+
+          {/* Acceso al panel solo para administradores */}
+          {usuario?.rol === 'ADMIN' && (
+            <a
+              href="/admin"
+              className="hidden sm:flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold text-pink-300 border border-pink-400/30 hover:bg-pink-500/10"
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              <span>Admin</span>
+            </a>
+          )}
 
           {/* Estado de sesión */}
           {usuario ? (

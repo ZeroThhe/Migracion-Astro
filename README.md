@@ -60,3 +60,11 @@ siguiente paso sería convertir la máquina de estados de `useFlowStore` en
 rutas reales de Astro (`src/pages/producto/[id].astro`, etc.) y dejar
 solo el carrito/checkout/login como islas pequeñas — pero eso es un
 trabajo de refactor más grande, no fue lo que se pidió aquí.
+
+## 💳 Métodos de pago y 🛠️ Admin Dashboard
+
+- **Pagos:** en el checkout el cliente elige **PayPal** o **Mercado Pago**. Se crea el pedido
+  `PENDIENTE`, se paga, y el **backend verifica con la pasarela** antes de marcarlo `PAGADO`.
+  Las credenciales van en `back/.env` (ver `back/.env.example`); el front no guarda llaves.
+- **Admin:** `/admin` (botón "Admin" en la barra al entrar con una cuenta ADMIN): resumen de ventas
+  por método de pago, CRUD de productos y cambio de estado de pedidos.
