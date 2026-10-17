@@ -177,6 +177,26 @@ export const MUTATIONS = {
     }
   `,
 
+  // Mercado Pago Checkout Pro (redirección). Se conservan por compatibilidad con el backend;
+  // el checkout actual usa el formulario de tarjeta de arriba.
+  CREAR_PAGO_MERCADO_PAGO: `
+    mutation ($pedidoId: Int!) { crearPagoMercadoPago(pedidoId: $pedidoId) }
+  `,
+  CONFIRMAR_PAGO_MERCADO_PAGO: `
+    mutation ($pedidoId: Int!, $paymentId: String!) {
+      confirmarPagoMercadoPago(pedidoId: $pedidoId, paymentId: $paymentId) {
+        id fecha total status direccionEnvio metodoPago referenciaPago
+      }
+    }
+  `,
+  VERIFICAR_PAGO_MERCADO_PAGO: `
+    mutation ($pedidoId: Int!) {
+      verificarPagoMercadoPago(pedidoId: $pedidoId) {
+        id fecha total status direccionEnvio metodoPago referenciaPago
+      }
+    }
+  `,
+
   // ---- Admin ----
   REGISTRAR_PRODUCTO: `
     mutation ($input: ProductoInput!) { registrarProducto(input: $input) { id } }
