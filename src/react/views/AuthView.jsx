@@ -6,7 +6,7 @@ import { useFlowStore } from '../store/useFlowStore';
 
 export default function AuthView() {
   const [modo, setModo] = useState('login'); // 'login' | 'registro'
-  const [form, setForm] = useState({ nombre: '', email: '', password: '' });
+  const [form, setForm] = useState({ nombre: '', email: '', password: '', confirmar: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const setSession = useAuthStore((s) => s.setSession);
@@ -16,6 +16,11 @@ export default function AuthView() {
 
   const enviar = async (e) => {
     e.preventDefault();
+    // En el registro, las dos contraseñas deben coincidir antes de mandar nada al backend
+    if (modo === 'registro' && form.password !== form.confirmar) {
+      setError('Las contraseñas no coinciden');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -27,7 +32,9 @@ export default function AuthView() {
         setSession(tokenData.access_token, data.me);
       } else {
         // El registro de cuentas no es parte del spec OAuth2, sigue siendo GraphQL
-        await fetchGraphQL(MUTATIONS.REGISTRO, { datos: form });
+        // "confirmar" solo se usa en el front, el backend no lo recibe
+        const { nombre, email, password } = form;
+        await fetchGraphQL(MUTATIONS.REGISTRO, { datos: { nombre, email, password } });
         // Tras registrar, inicia sesión automáticamente con las mismas credenciales
         const tokenData = await loginOAuth2(form.email, form.password);
         setSession(tokenData.access_token, null);
@@ -59,6 +66,10 @@ export default function AuthView() {
             onChange={cambiar('email')} className="w-full rounded-full glass-input px-4 py-2 text-xs" />
           <input required type="password" minLength={6} placeholder="Contraseña (mínimo 6)" value={form.password}
             onChange={cambiar('password')} className="w-full rounded-full glass-input px-4 py-2 text-xs" />
+          {modo === 'registro' && (
+            <input required type="password" minLength={6} placeholder="Confirmar contraseña" value={form.confirmar}
+              onChange={cambiar('confirmar')} className="w-full rounded-full glass-input px-4 py-2 text-xs" />
+          )}
 
           {error && (
             <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3 text-xs text-rose-300">{error}</div>

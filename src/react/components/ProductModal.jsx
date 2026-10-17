@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { X, ShoppingBag, Disc, ShieldCheck, Check } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
@@ -13,6 +13,12 @@ export default function ProductModal() {
   const addToCart = useCartStore((state) => state.addToCart);
   const [cantidad, setCantidad] = useState(1);
   const [agregado, setAgregado] = useState(false);
+
+  // Cada vez que se abre (o cambia) un disco, la cantidad regresa a 1
+  useEffect(() => {
+    setCantidad(1);
+    setAgregado(false);
+  }, [quickViewProduct]);
 
   if (!quickViewProduct) return null;
 

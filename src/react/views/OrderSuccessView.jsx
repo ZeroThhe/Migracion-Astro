@@ -22,7 +22,7 @@ export default function OrderSuccessView() {
           Pedido Creado Exitosamente
         </h1>
         <p className="text-xs text-amber-200/70 mt-2 max-w-md mx-auto">
-          Tu orden ha sido registrada en el servidor GraphQL y el stock ha sido actualizado en la base de datos real.
+          Tu pago fue verificado con la pasarela, la orden quedó registrada y el stock se actualizó en la base de datos.
         </p>
 
         {completedOrder && (
@@ -48,6 +48,12 @@ export default function OrderSuccessView() {
                 <span className="text-amber-200/50 block text-[10px]">Método de Pago</span>
                 <span className="font-bold text-amber-100">{completedOrder.metodoPago}</span>
               </div>
+              {completedOrder.referenciaPago && (
+                <div className="col-span-2">
+                  <span className="text-amber-200/50 block text-[10px]">Referencia del pago</span>
+                  <span className="font-bold text-amber-100 break-all">{completedOrder.referenciaPago}</span>
+                </div>
+              )}
               <div className="col-span-2">
                 <span className="text-amber-200/50 block text-[10px]">Dirección de Envío</span>
                 <span className="font-bold text-amber-100">{completedOrder.direccionEnvio}</span>
