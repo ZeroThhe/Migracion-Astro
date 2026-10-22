@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Package, Receipt, BarChart3, Trash2, Pencil, RefreshCw } from 'lucide-react';
-import { fetchGraphQL, QUERIES, MUTATIONS } from '../graphql/client';
+import { ArrowLeft, Package, Receipt, BarChart3, Trash2, Pencil, RefreshCw, Users, Bell } from 'lucide-react';
+import { fetchGraphQL, suscribir, QUERIES, MUTATIONS, SUBSCRIPTIONS } from '../graphql/client';
 import { useAuthStore } from '../store/useAuthStore';
 
 /**
@@ -24,7 +24,10 @@ const dinero = (n) => `$${n.toFixed(2)}`;
 
 export default function AdminDashboard() {
   const usuario = useAuthStore((s) => s.usuario);
+  const token = useAuthStore((s) => s.token);
   const [tab, setTab] = useState('resumen');
+  const [usuarios, setUsuarios] = useState([]);
+  const [aviso, setAviso] = useState(null); // aviso emergente de las Subscriptions
   const [productos, setProductos] = useState([]);
   const [pedidos, setPedidos] = useState([]);
   const [categorias, setCategorias] = useState([]);
@@ -37,14 +40,16 @@ export default function AdminDashboard() {
     setCargando(true);
     setError(null);
     try {
-      const [p, h, c] = await Promise.all([
+      const [p, h, c, u] = await Promise.all([
         fetchGraphQL(QUERIES.GET_PRODUCTOS, { limit: 500, offset: 0 }),
         fetchGraphQL(QUERIES.HISTORIAL_PEDIDOS),
         fetchGraphQL(QUERIES.GET_CATEGORIAS),
+        fetchGraphQL(QUERIES.USUARIOS),
       ]);
       setProductos(p.productos.productos);
       setPedidos(h.historialPedidos);
       setCategorias(c.categorias);
+      setUsuarios(u.usuarios);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -55,6 +60,42 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (usuario?.rol === 'ADMIN') cargar();
   }, [usuario]);
+
+  // ---------- Tiempo real (Subscriptions por WebSocket) ----------
+  // IMPORTANTE: estos hooks van ANTES del return de "Acceso restringido" (reglas de los hooks).
+  useEffect(() => {
+    if (usuario?.rol !== 'ADMIN' || !token) return;
+
+    const stopPedidos = suscribir(SUBSCRIPTIONS.PEDIDO_ACTUALIZADO, {
+      onData: (d) => {
+        const n = d.pedidoActualizado;
+        // si ya existe lo reemplaza; si es nuevo lo pone hasta arriba
+        setPedidos((prev) =>
+          prev.some((o) => o.id === n.id) ? prev.map((o) => (o.id === n.id ? n : o)) : [n, ...prev]
+        );
+        setAviso(n.status === 'PENDIENTE' ? `Pedido nuevo #${n.id}` : `Pedido #${n.id}: ${n.status}`);
+      },
+      onError: (msg) => setError(msg),
+    });
+
+    const stopStock = suscribir(SUBSCRIPTIONS.STOCK_BAJO, {
+      onData: (d) => {
+        const p = d.stockBajo;
+        setProductos((prev) => prev.map((x) => (x.id === p.id ? { ...x, stock: p.stock } : x)));
+        setAviso(`Poco stock: ${p.nombre} (${p.stock} pzas)`);
+      },
+      onError: (msg) => setError(msg),
+    });
+
+    return () => { stopPedidos(); stopStock(); };
+  }, [usuario?.rol, token]);
+
+  // El aviso se cierra solo a los 6 segundos
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 6000);
+    return () => clearTimeout(t);
+  }, [aviso]);
 
   if (usuario?.rol !== 'ADMIN') {
     return (
@@ -115,7 +156,7 @@ export default function AdminDashboard() {
   const cambiarStatus = async (id, status) => {
     try {
       await fetchGraphQL(MUTATIONS.CAMBIAR_STATUS_PEDIDO, { id, status });
-      setPedidos(pedidos.map((o) => (o.id === id ? { ...o, status } : o)));
+      setPedidos((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
     } catch (err) {
       setError(err.message);
     }
@@ -135,10 +176,20 @@ export default function AdminDashboard() {
     { id: 'resumen', nombre: 'Resumen', icono: BarChart3 },
     { id: 'productos', nombre: 'Productos', icono: Package },
     { id: 'pedidos', nombre: 'Pedidos y pagos', icono: Receipt },
+    { id: 'usuarios', nombre: 'Usuarios', icono: Users },
   ];
 
   return (
     <div className="min-h-screen max-w-6xl mx-auto px-4 py-8 sm:px-8 space-y-6">
+      {aviso && (
+        <div
+          role="status"
+          onClick={() => setAviso(null)}
+          className="fixed top-4 right-4 z-50 glass-panel rounded-2xl border border-pink-400/40 px-4 py-3 text-xs font-bold text-pink-200 shadow-lg inline-flex items-center gap-2 cursor-pointer"
+        >
+          <Bell className="h-4 w-4" /> {aviso}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <a href="/" className="text-xs text-amber-300 hover:underline inline-flex items-center gap-1">
@@ -328,6 +379,34 @@ export default function AdminDashboard() {
                         <option key={s} value={s} className="bg-[#180D09] text-white">{s}</option>
                       ))}
                     </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ================= USUARIOS (solo lectura) ================= */}
+      {tab === 'usuarios' && (
+        <div className="overflow-x-auto glass-panel rounded-2xl border border-amber-500/20">
+          <table className="w-full text-left text-xs">
+            <thead className="text-amber-200/60 border-b border-amber-500/20">
+              <tr>
+                <th className="p-3">ID</th><th className="p-3">Nombre</th>
+                <th className="p-3">Correo</th><th className="p-3">Rol</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map((u) => (
+                <tr key={u.id} className="border-b border-amber-500/10 text-amber-100">
+                  <td className="p-3 font-bold">#{u.id}</td>
+                  <td className="p-3">{u.nombre}</td>
+                  <td className="p-3">{u.email}</td>
+                  <td className="p-3">
+                    <span className={`rounded-full px-2 py-1 font-bold ${u.rol === 'ADMIN' ? 'bg-pink-500/20 text-pink-200' : 'bg-white/5 text-amber-200'}`}>
+                      {u.rol}
+                    </span>
                   </td>
                 </tr>
               ))}

@@ -8,6 +8,9 @@ const API_BASE = import.meta.env.PUBLIC_API_URL || "http://localhost:8000";
 const GRAPHQL_ENDPOINT = `${API_BASE}/graphql`;
 const TOKEN_ENDPOINT = `${API_BASE}/token`;
 
+// ws:// (o wss:// si el backend es https) para las Subscriptions
+const WS_ENDPOINT = GRAPHQL_ENDPOINT.replace(/^http/, "ws");
+
 export async function fetchGraphQL(query, variables = {}) {
   try {
     const token = useAuthStore.getState().token;
@@ -35,9 +38,59 @@ export async function fetchGraphQL(query, variables = {}) {
 
     return json.data;
   } catch (error) {
-    console.error("❌ Error en petición GraphQL:", error);
+    console.error("Error en peticion GraphQL:", error);
     throw error;
   }
+}
+
+/**
+ * Subscriptions GraphQL por WebSocket (protocolo graphql-transport-ws).
+ * El navegador no deja mandar el header Authorization en un WebSocket,
+ * por eso el token viaja en la URL (?token=); el backend lo lee en get_context.
+ * Devuelve una función para cancelar la suscripción (úsala en el cleanup del useEffect).
+ */
+export function suscribir(query, { variables = {}, onData, onError } = {}) {
+  const token = useAuthStore.getState().token;
+  if (!token) return () => {};
+
+  const url = `${WS_ENDPOINT}?token=${encodeURIComponent(token)}`;
+  let ws;
+  let cerrado = false;
+  let reintento;
+
+  const conectar = () => {
+    ws = new WebSocket(url, "graphql-transport-ws");
+
+    ws.onopen = () => ws.send(JSON.stringify({ type: "connection_init" }));
+
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "connection_ack") {
+        ws.send(JSON.stringify({ id: "1", type: "subscribe", payload: { query, variables } }));
+      } else if (msg.type === "ping") {
+        ws.send(JSON.stringify({ type: "pong" }));
+      } else if (msg.type === "next") {
+        if (msg.payload?.errors?.length) onError?.(msg.payload.errors[0].message);
+        else onData?.(msg.payload.data);
+      } else if (msg.type === "error") {
+        onError?.(msg.payload?.[0]?.message || "Error en la suscripción");
+      }
+    };
+
+    // Si se corta la red o el servidor se reinicia, reintenta a los 3 s
+    ws.onclose = () => {
+      if (!cerrado) reintento = setTimeout(conectar, 3000);
+    };
+  };
+
+  conectar();
+
+  return () => {
+    cerrado = true;
+    clearTimeout(reintento);
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ id: "1", type: "complete" }));
+    ws.close();
+  };
 }
 
 /**
@@ -62,6 +115,14 @@ export async function loginOAuth2(email, password) {
   }
   return response.json(); // { access_token, token_type }
 }
+
+// Campos de un pedido. La query y la subscription usan EXACTAMENTE los mismos,
+// así un pedido que llega en vivo se puede pintar igual que uno cargado al inicio.
+const CAMPOS_PEDIDO = `
+  id fecha total status metodoPago referenciaPago direccionEnvio
+  usuario { nombre email }
+  detalles { cantidad precioUnitario producto { nombre } }
+`;
 
 // Queries Predefinidas
 export const QUERIES = {
@@ -133,14 +194,26 @@ export const QUERIES = {
   // Admin: el backend regresa TODOS los pedidos si el token es de un ADMIN
   HISTORIAL_PEDIDOS: `
     query {
-      historialPedidos {
-        id fecha total status metodoPago referenciaPago direccionEnvio
-        usuario { nombre email }
-        detalles { cantidad precioUnitario producto { nombre } }
-      }
+      historialPedidos { ${CAMPOS_PEDIDO} }
     }
   `,
+
+  // Admin: lista de usuarios registrados
+  USUARIOS: `
+    query { usuarios { id nombre email rol } }
+  `,
 };
+
+// Subscriptions (solo ADMIN): el servidor las empuja cuando pasa algo
+export const SUBSCRIPTIONS = {
+  PEDIDO_ACTUALIZADO: `
+    subscription { pedidoActualizado { ${CAMPOS_PEDIDO} } }
+  `,
+  STOCK_BAJO: `
+    subscription { stockBajo { id nombre artista stock } }
+  `,
+};
+
 
 // Mutations Predefinidas
 export const MUTATIONS = {
