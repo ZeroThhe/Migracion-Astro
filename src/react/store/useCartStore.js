@@ -46,6 +46,17 @@ export const useCartStore = create(persist((set, get) => ({
   // Vaciar carrito
   clearCart: () => set({ cartItems: [] }),
 
+  // Sincroniza los datos (precio, stock...) de un producto que cambió en el catálogo
+  sincronizarProducto: (producto) => {
+    set((state) => ({
+      cartItems: state.cartItems.map((item) =>
+        item.producto.id === producto.id
+          ? { ...item, producto: { ...item.producto, ...producto } }
+          : item
+      ),
+    }));
+  },
+
   // Cómputo del total de items
   getTotalItems: () => {
     return get().cartItems.reduce((acc, item) => acc + item.cantidad, 0);

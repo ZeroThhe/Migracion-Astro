@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useTransition, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
 import ContextBar from './components/ContextBar';
@@ -10,7 +10,7 @@ import ProductDetailView from './views/ProductDetailView';
 import CartView from './views/CartView';
 import CheckoutView from './views/CheckoutView';
 import OrderSuccessView from './views/OrderSuccessView';
-import { fetchGraphQL, QUERIES, MUTATIONS } from './graphql/client';
+import { fetchGraphQL, suscribir, QUERIES, MUTATIONS, SUBSCRIPTIONS } from './graphql/client';
 import { useCartStore } from './store/useCartStore';
 import { useFlowStore, VIEWS } from './store/useFlowStore';
 import AuthView from './views/AuthView';
@@ -87,8 +87,8 @@ export default function App() {
   }, []);
 
   // Cargar Productos desde GraphQL (Tema 7: Fetching)
-  const cargarProductos = useCallback(async (catId = null, busqueda = '') => {
-    setLoading(true);
+  const cargarProductos = useCallback(async (catId = null, busqueda = '', silencioso = false) => {
+    if (!silencioso) setLoading(true); // en recargas en vivo no se muestra el esqueleto de carga
     setError(null);
     try {
       const variables = {
@@ -116,6 +116,47 @@ export default function App() {
     cargarCategorias();
     cargarProductos(selectedCategory?.id, searchQuery);
   }, [cargarCategorias, cargarProductos, selectedCategory, searchQuery]);
+
+  // ---------- Catálogo en vivo (Subscription pública, no requiere sesión) ----------
+  // filtrosRef guarda la categoría/búsqueda actuales sin reiniciar el WebSocket al cambiarlos
+  const filtrosRef = useRef({});
+  filtrosRef.current = { catId: selectedCategory?.id, busqueda: searchQuery };
+
+  useEffect(() => {
+    const parar = suscribir(SUBSCRIPTIONS.CATALOGO_ACTUALIZADO, {
+      publica: true,
+      onData: (d) => {
+        const { tipo, id, producto } = d.catalogoActualizado;
+
+        if (tipo === 'ELIMINADO') {
+          setProductos((prev) => prev.filter((p) => p.id !== id));
+          useCartStore.getState().removeFromCart(id);
+          const flow = useFlowStore.getState();
+          if (flow.quickViewProduct?.id === id) flow.cerrarModalProducto();
+          if (flow.selectedProduct?.id === id) flow.irAlHome();
+          return;
+        }
+
+        if (tipo === 'CREADO') {
+          // producto nuevo: se recarga la lista con los filtros actuales
+          const f = filtrosRef.current;
+          cargarProductos(f.catId, f.busqueda, true);
+          return;
+        }
+
+        // ACTUALIZADO (cambio de precio, stock, nombre...): se reemplaza en todos lados
+        if (!producto) return;
+        setProductos((prev) => prev.map((p) => (p.id === producto.id ? { ...p, ...producto } : p)));
+        useCartStore.getState().sincronizarProducto(producto);
+        useFlowStore.setState((s) => ({
+          selectedProduct: s.selectedProduct?.id === producto.id ? { ...s.selectedProduct, ...producto } : s.selectedProduct,
+          quickViewProduct: s.quickViewProduct?.id === producto.id ? { ...s.quickViewProduct, ...producto } : s.quickViewProduct,
+        }));
+      },
+      onError: (msg) => console.error('Catálogo en vivo:', msg),
+    });
+    return parar;
+  }, [cargarProductos]);
 
   // Manejo de Evento Custom al Elegir Categoría (Tema 5)
   const handleSelectCategory = (cat) => {

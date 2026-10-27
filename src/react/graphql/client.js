@@ -7,7 +7,6 @@ import { useAuthStore } from '../store/useAuthStore';
 const API_BASE = import.meta.env.PUBLIC_API_URL || "http://localhost:8000";
 const GRAPHQL_ENDPOINT = `${API_BASE}/graphql`;
 const TOKEN_ENDPOINT = `${API_BASE}/token`;
-
 // ws:// (o wss:// si el backend es https) para las Subscriptions
 const WS_ENDPOINT = GRAPHQL_ENDPOINT.replace(/^http/, "ws");
 
@@ -38,7 +37,7 @@ export async function fetchGraphQL(query, variables = {}) {
 
     return json.data;
   } catch (error) {
-    console.error("Error en peticion GraphQL:", error);
+    console.error("❌ Error en petición GraphQL:", error);
     throw error;
   }
 }
@@ -49,11 +48,12 @@ export async function fetchGraphQL(query, variables = {}) {
  * por eso el token viaja en la URL (?token=); el backend lo lee en get_context.
  * Devuelve una función para cancelar la suscripción (úsala en el cleanup del useEffect).
  */
-export function suscribir(query, { variables = {}, onData, onError } = {}) {
+export function suscribir(query, { variables = {}, onData, onError, publica = false } = {}) {
   const token = useAuthStore.getState().token;
-  if (!token) return () => {};
+  // Las subscriptions de admin exigen token; las públicas (catálogo) funcionan sin sesión
+  if (!token && !publica) return () => {};
 
-  const url = `${WS_ENDPOINT}?token=${encodeURIComponent(token)}`;
+  const url = token ? `${WS_ENDPOINT}?token=${encodeURIComponent(token)}` : WS_ENDPOINT;
   let ws;
   let cerrado = false;
   let reintento;
@@ -212,8 +212,18 @@ export const SUBSCRIPTIONS = {
   STOCK_BAJO: `
     subscription { stockBajo { id nombre artista stock } }
   `,
-};
 
+  // Pública: la escucha la tienda del cliente (sin sesión)
+  CATALOGO_ACTUALIZADO: `
+    subscription {
+      catalogoActualizado {
+        tipo
+        id
+        producto { id nombre artista formato precio imagen stock destacado categoriaId }
+      }
+    }
+  `,
+};
 
 // Mutations Predefinidas
 export const MUTATIONS = {
